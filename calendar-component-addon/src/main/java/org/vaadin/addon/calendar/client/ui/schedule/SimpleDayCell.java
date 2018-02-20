@@ -39,9 +39,10 @@ import java.util.Date;
 public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         MouseDownHandler, MouseOverHandler, MouseMoveHandler {
 
-    private static int BOTTOMSPACERHEIGHT = -1;
-    private static int EVENTHEIGHT = -1;
     private static final int BORDERPADDINGSIZE = 1;
+
+    private static int eventHeight = -1;
+    private static int bottomSpacerHeight = -1;
 
     private final VCalendar calendar;
     private Date date;
@@ -72,15 +73,19 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
     // "to" time of date which is source of Dnd
     private Date dndSourceEndDateTime;
 
+    private boolean extended = false;
+
     private int prevDayDiff = 0;
     private int prevWeekDiff = 0;
-    private HandlerRegistration moveRegistration;
-    private CalendarItem moveEvent;
-    private Widget clickedWidget;
-    private HandlerRegistration bottomSpacerMouseDownHandler;
-    private boolean scrollable = false;
-    private MonthGrid monthGrid;
+
     private HandlerRegistration keyDownHandler;
+    private HandlerRegistration moveRegistration;
+    private HandlerRegistration bottomSpacerMouseDownHandler;
+
+    private CalendarItem movingItem;
+
+    private Widget clickedWidget;
+    private MonthGrid monthGrid;
 
     public SimpleDayCell(VCalendar calendar, int row, int cell) {
         this.calendar = calendar;
@@ -88,20 +93,21 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         this.cell = cell;
         setStylePrimaryName("v-calendar-month-day");
         caption = new Label();
+        caption.setStyleName("v-calendar-day-number");
+        caption.addMouseDownHandler(this);
+        caption.addMouseUpHandler(this);
+        add(caption);
+
         bottomspacer = new HTML();
         bottomspacer.setStyleName("v-calendar-bottom-spacer-empty");
         bottomspacer.setWidth(3 + "em");
-        caption.setStyleName("v-calendar-day-number");
-        add(caption);
         add(bottomspacer);
-        caption.addMouseDownHandler(this);
-        caption.addMouseUpHandler(this);
     }
 
     @Override
     public void onLoad() {
-        BOTTOMSPACERHEIGHT = bottomspacer.getOffsetHeight();
-        EVENTHEIGHT = BOTTOMSPACERHEIGHT;
+        bottomSpacerHeight = bottomspacer.getOffsetHeight();
+        eventHeight = bottomSpacerHeight;
     }
 
     public void setMonthGrid(MonthGrid monthGrid) {
@@ -114,13 +120,19 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
 
     @SuppressWarnings("deprecation")
     public void setDate(Date date) {
-        int dateOfMonth = date.getDate();
+        int dayOfMonth = date.getDate();
         if (monthNameVisible) {
-            caption.setText(dateOfMonth + " "
-                    + calendar.getMonthNames()[date.getMonth()]);
+            caption.setText(dayOfMonth + " " + calendar.getMonthNames()[date.getMonth()]);
         } else {
-            caption.setText("" + dateOfMonth);
+            caption.setText("" + dayOfMonth);
         }
+
+        if (dayOfMonth == 1) {
+            addStyleName("firstDay");
+        } else {
+            removeStyleName("firstDay");
+        }
+
         this.date = date;
     }
 
@@ -159,18 +171,21 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
 
         // How many calendarItems can be shown in UI
         int slots = 0;
-        if (scrollable) {
+        if (extended) {
+
             for (int i = 0; i < calendarItems.length; i++) {
                 if (calendarItems[i] != null) {
                     slots = i + 1;
                 }
             }
+
             setHeight(intHeight + "px"); // Fixed height
+
         } else {
+
             // Dynamic height by the content
             getElement().removeAttribute("height");
-            slots = (intHeight - caption.getOffsetHeight() - BOTTOMSPACERHEIGHT)
-                    / EVENTHEIGHT;
+            slots = (intHeight - caption.getOffsetHeight() - bottomSpacerHeight) / eventHeight;
             if (slots > 10) {
                 slots = 10;
             }
@@ -184,37 +199,45 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         int eventsAdded = 0;
 
         for (int i = 0; i < slots; i++) {
+
             CalendarItem e = calendarItems[i];
+
             if (e == null) {
+
                 // Empty slot
                 HTML slot = new HTML();
                 slot.setStyleName("v-calendar-spacer");
+
                 if (!clear) {
                     remove(i + 1);
                     insert(slot, i + 1);
                 } else {
                     add(slot);
                 }
+
             } else {
+
                 // Item slot
                 eventsAdded++;
                 if (!clear) {
+
                     Widget w = getWidget(i + 1);
+
                     if (!(w instanceof MonthItemLabel)) {
                         remove(i + 1);
                         insert(createMonthItemLabel(e), i + 1);
                     }
+
                 } else {
                     add(createMonthItemLabel(e));
                 }
             }
         }
 
-        int remainingSpace = intHeight - ((slots * EVENTHEIGHT)
-                + BOTTOMSPACERHEIGHT + caption.getOffsetHeight());
-        int newHeight = remainingSpace + BOTTOMSPACERHEIGHT;
+        int remainingSpace = intHeight - ((slots * eventHeight) + bottomSpacerHeight + caption.getOffsetHeight());
+        int newHeight = remainingSpace + bottomSpacerHeight;
         if (newHeight < 0) {
-            newHeight = EVENTHEIGHT;
+            newHeight = eventHeight;
         }
         bottomspacer.setHeight(newHeight + "px");
 
@@ -229,15 +252,18 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
                         .addMouseDownHandler(this);
             }
             bottomspacer.setStyleName("v-calendar-bottom-spacer");
-            bottomspacer.setText("+ " + more);
+            bottomspacer.setHTML("<span>" + more + "</span>");
+
         } else {
-            if (!scrollable && bottomSpacerMouseDownHandler != null) {
+            if (!extended && bottomSpacerMouseDownHandler != null) {
                 bottomSpacerMouseDownHandler.removeHandler();
                 bottomSpacerMouseDownHandler = null;
             }
 
-            if (scrollable) {
-                bottomspacer.setText("[ - ]");
+            if (extended) {
+                bottomspacer.setStyleName("v-calendar-bottom-spacer-expanded");
+                bottomspacer.setHTML("<span></span>");
+
             } else {
                 bottomspacer.setStyleName("v-calendar-bottom-spacer-empty");
                 bottomspacer.setText("");
@@ -245,11 +271,7 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         }
     }
 
-    private MonthItemLabel createMonthItemLabel(CalendarItem e) {
-        long rangeInMillis = e.getRangeInMilliseconds();
-        boolean timeEvent = rangeInMillis <= DateConstants.DAYINMILLIS
-                && !e.isAllDay();
-        Date fromDatetime = e.getStartTime();
+    private MonthItemLabel createMonthItemLabel(CalendarItem item) {
 
         // Create a new MonthItemLabel
         MonthItemLabel eventDiv = new MonthItemLabel();
@@ -257,45 +279,51 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         eventDiv.addMouseDownHandler(this);
         eventDiv.addMouseUpHandler(this);
         eventDiv.setCalendar(calendar);
-        eventDiv.setItemIndex(e.getIndex());
-        eventDiv.setCalendarItem(e);
+        eventDiv.setItemIndex(item.getIndex());
+        eventDiv.setCalendarItem(item);
 
-        if (timeEvent) {
-            eventDiv.setTimeSpecificEvent(true);
-            if (e.getStyleName() != null) {
-                eventDiv.addStyleDependentName(e.getStyleName());
+        if (item.getRangeInMilliseconds() <= DateConstants.DAYINMILLIS && !item.isAllDay()) {
+
+            if (item.getStyleName() != null) {
+                eventDiv.addStyleDependentName(item.getStyleName());
             }
-            eventDiv.setCaption(e.getCaption());
-            eventDiv.setTime(fromDatetime);
+
+            eventDiv.setTimeSpecificEvent(true);
+            eventDiv.setCaption(item.getCaption());
+            eventDiv.setTime(item.getStartTime());
 
         } else {
+
             eventDiv.setTimeSpecificEvent(false);
-            Date from = e.getStart();
-            Date to = e.getEnd();
-            if (e.getStyleName().length() > 0) {
-                eventDiv.addStyleName("month-event " + e.getStyleName());
+
+            if (item.getStyleName().length() > 0) {
+                eventDiv.addStyleName("month-event " + item.getStyleName());
             } else {
                 eventDiv.addStyleName("month-event");
             }
-            int fromCompareToDate = from.compareTo(date);
-            int toCompareToDate = to.compareTo(date);
+
+            int fromCompareToDate = item.getStart().compareTo(date);
+            int toCompareToDate = item.getEnd().compareTo(date);
+
             eventDiv.addStyleDependentName("all-day");
+
             if (fromCompareToDate == 0) {
                 eventDiv.addStyleDependentName("start");
-                eventDiv.setCaption(e.getCaption());
+                eventDiv.setCaption(item.getCaption());
 
             } else if (fromCompareToDate < 0 && cell == 0) {
                 eventDiv.addStyleDependentName("continued-from");
-                eventDiv.setCaption(e.getCaption());
+                eventDiv.setCaption(item.getCaption());
             }
+
             if (toCompareToDate == 0) {
                 eventDiv.addStyleDependentName("end");
-            } else if (toCompareToDate > 0
-                    && (cell + 1) == getMonthGrid().getCellCount(row)) {
+            } else if (toCompareToDate > 0 && (cell + 1) == getMonthGrid().getCellCount(row)) {
                 eventDiv.addStyleDependentName("continued-to");
             }
-            if (e.getStyleName() != null) {
-                eventDiv.addStyleDependentName(e.getStyleName() + "-all-day");
+
+            if (item.getStyleName() != null) {
+                eventDiv.addStyleDependentName(item.getStyleName() + "-all-day");
             }
         }
 
@@ -303,37 +331,35 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
     }
 
     private void setUnlimitedCellHeight() {
-        scrollable = true;
-        addStyleDependentName("scrollable");
+        extended = true;
+        addStyleDependentName("extended");
     }
 
     private void setLimitedCellHeight() {
-        scrollable = false;
-        removeStyleDependentName("scrollable");
+        extended = false;
+        removeStyleDependentName("extended");
     }
 
-    public void addItem(CalendarItem e) {
+    public void addItem(CalendarItem item) {
         itemCount++;
-        int slot = e.getSlotIndex();
+        int slot = item.getSlotIndex();
         if (slot == -1) {
             for (int i = 0; i < calendarItems.length; i++) {
                 if (calendarItems[i] == null) {
-                    calendarItems[i] = e;
-                    e.setSlotIndex(i);
+                    calendarItems[i] = item;
+                    item.setSlotIndex(i);
                     break;
                 }
             }
         } else {
-            calendarItems[slot] = e;
+            calendarItems[slot] = item;
         }
     }
 
     @SuppressWarnings("deprecation")
     public void setMonthNameVisible(boolean b) {
         monthNameVisible = b;
-        int dateOfMonth = date.getDate();
-        caption.setText(
-                dateOfMonth + " " + calendar.getMonthNames()[date.getMonth()]);
+        caption.setText( date.getDate() + " " + calendar.getMonthNames()[date.getMonth()]);
     }
 
     public HandlerRegistration addMouseMoveHandler(MouseMoveHandler handler) {
@@ -362,7 +388,6 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             return;
         }
 
-        Widget w = (Widget) event.getSource();
         if (moveRegistration != null) {
             Event.releaseCapture(getElement());
             moveRegistration.removeHandler();
@@ -371,11 +396,12 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             keyDownHandler = null;
         }
 
+        Widget w = (Widget) event.getSource();
         if (w == bottomspacer && monthEventMouseDown) {
             GWT.log("Mouse up over bottomspacer");
 
-        } else if (clickedWidget instanceof MonthItemLabel
-                && monthEventMouseDown) {
+        } else if (clickedWidget instanceof MonthItemLabel  && monthEventMouseDown) {
+
             MonthItemLabel mel = (MonthItemLabel) clickedWidget;
 
             int endX = event.getClientX();
@@ -391,23 +417,26 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             prevWeekDiff = 0;
 
             if (xDiff < -3 || xDiff > 3 || yDiff < -3 || yDiff > 3) {
-                itemMoved(moveEvent);
+                itemMoved(movingItem);
 
             } else if (calendar.getItemClickListener() != null) {
                 CalendarItem e = getItemByWidget(mel);
+
+                if(e.isClickable())
                 calendar.getItemClickListener().itemClick(e);
             }
 
-            moveEvent = null;
+            movingItem = null;
+
         } else if (w == this) {
             getMonthGrid().setSelectionReady();
 
         } else if (w instanceof Label && labelMouseDown) {
-            String clickedDate = calendar.getDateFormat().format(date);
             if (calendar.getDateClickListener() != null) {
-                calendar.getDateClickListener().dateClick(clickedDate);
+                calendar.getDateClickListener().dateClick(DateConstants.toRPCDate(date));
             }
         }
+
         monthEventMouseDown = false;
         labelMouseDown = false;
         clickedWidget = null;
@@ -415,8 +444,8 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
 
     @Override
     public void onMouseDown(MouseDownEvent event) {
-        if (calendar.isDisabled()
-                || event.getNativeButton() != NativeEvent.BUTTON_LEFT) {
+
+        if (calendar.isDisabled() || event.getNativeButton() != NativeEvent.BUTTON_LEFT) {
             return;
         }
 
@@ -424,22 +453,30 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         clickedWidget = w;
 
         if (w instanceof MonthItemLabel) {
+
             // event clicks should be allowed even when read-only
             monthEventMouseDown = true;
 
-            if (calendar.isItemMoveAllowed()) {
+            if (calendar.isItemMoveAllowed()
+                    && ((MonthItemLabel)w).getCalendarItem().isMoveable()) {
                 startCalendarItemDrag(event, (MonthItemLabel) w);
             }
+
         } else if (w == bottomspacer) {
-            if (scrollable) {
+
+            if (extended) {
                 setLimitedCellHeight();
             } else {
                 setUnlimitedCellHeight();
             }
+
             reDraw(true);
+
         } else if (w instanceof Label) {
             labelMouseDown = true;
-        } else if (w == this && !scrollable) {
+
+        } else if (w == this && !extended) {
+
             MonthGrid grid = getMonthGrid();
             if (grid.isEnabled() && calendar.isRangeSelectAllowed()) {
                 grid.setSelectionStart(this);
@@ -465,8 +502,6 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             return;
         }
 
-        MonthItemLabel w = (MonthItemLabel) clickedWidget;
-
         if (calendar.isDisabled()) {
             Event.releaseCapture(getElement());
             monthEventMouseDown = false;
@@ -489,7 +524,8 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         Element parent = getMonthGrid().getElement();
         int relativeX = event.getRelativeX(parent);
         int relativeY = event.getRelativeY(parent);
-        int weekDiff = 0;
+        int weekDiff;
+
         if (moveY > 0) {
             weekDiff = (startYrelative + moveY) / dateCellHeigth;
         } else {
@@ -497,7 +533,7 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
                     / dateCellHeigth;
         }
 
-        int dayDiff = 0;
+        int dayDiff;
         if (moveX >= 0) {
             dayDiff = (startXrelative + moveX) / dateCellWidth;
         } else {
@@ -514,41 +550,47 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             return;
         }
 
-        GWT.log("Item moving delta: " + weekDiff + " weeks " + dayDiff
-                + " days" + " (" + getCell() + "," + getRow() + ")");
+        MonthItemLabel widget = (MonthItemLabel) clickedWidget;
 
-        CalendarItem e = moveEvent;
-        if (e == null) {
-            e = getItemByWidget(w);
+        CalendarItem item = movingItem;
+        if (item == null) {
+            item = getItemByWidget(widget);
         }
 
-        Date from = e.getStart();
-        Date to = e.getEnd();
+        Date from = item.getStart();
+        Date to = item.getEnd();
 
         long daysMs = dayDiff * DateConstants.DAYINMILLIS;
         long weeksMs = weekDiff * DateConstants.WEEKINMILLIS;
 
-        setDates(e, from, to, weeksMs + daysMs, false);
-        e.setStart(from);
-        e.setEnd(to);
-        if (w.isTimeSpecificEvent()) {
+        setDates(item, from, to, weeksMs + daysMs, false);
+
+        item.setStart(from);
+        item.setEnd(to);
+
+        if (widget.isTimeSpecificEvent()) {
             Date start = new Date();
             Date end = new Date();
-            setDates(e, start, end, weeksMs + daysMs, true);
-            e.setStartTime(start);
-            e.setEndTime(end);
+
+            setDates(item, start, end, weeksMs + daysMs, true);
+
+            item.setStartTime(start);
+            item.setEndTime(end);
+
         } else {
-            e.setStartTime(new Date(from.getTime()));
-            e.setEndTime(new Date(to.getTime()));
+
+            item.setStartTime(new Date(from.getTime()));
+            item.setEndTime(new Date(to.getTime()));
         }
 
-        updateDragPosition(w, dayDiff, weekDiff);
+        updateDragPosition(widget, dayDiff, weekDiff);
     }
 
-    private void setDates(CalendarItem e, Date start, Date end, long shift,
-                          boolean isDateTime) {
+    private void setDates(CalendarItem e, Date start, Date end, long shift, boolean isDateTime) {
+
         Date currentStart;
         Date currentEnd;
+
         if (isDateTime) {
             currentStart = e.getStartTime();
             currentEnd = e.getEndTime();
@@ -556,19 +598,20 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             currentStart = e.getStart();
             currentEnd = e.getEnd();
         }
-        long duration = currentEnd.getTime() - currentStart.getTime();
+
         if (isDateTime) {
             start.setTime(dndSourceStartDateTime.getTime() + shift);
         } else {
             start.setTime(dndSourceDateFrom.getTime() + shift);
         }
-        end.setTime((start.getTime() + duration));
+
+        end.setTime((start.getTime() + currentEnd.getTime() - currentStart.getTime()));
     }
 
-    private void itemMoved(CalendarItem e) {
-        calendar.updateItemToMonthGrid(e);
+    private void itemMoved(CalendarItem calendarItem) {
+        calendar.updateItemToMonthGrid(calendarItem);
         if (calendar.getItemMovedListener() != null) {
-            calendar.getItemMovedListener().itemMoved(e);
+            calendar.getItemMovedListener().itemMoved(calendarItem);
         }
     }
 
@@ -604,15 +647,15 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
     protected void cancelItemDrag(MonthItemLabel label) {
         if (moveRegistration != null) {
             // reset position
-            if (moveEvent == null) {
-                moveEvent = getItemByWidget(label);
+            if (movingItem == null) {
+                movingItem = getItemByWidget(label);
             }
 
-            moveEvent.setStart(dndSourceDateFrom);
-            moveEvent.setEnd(dndSourceDateTo);
-            moveEvent.setStartTime(dndSourceStartDateTime);
-            moveEvent.setEndTime(dndSourceEndDateTime);
-            calendar.updateItemToMonthGrid(moveEvent);
+            movingItem.setStart(dndSourceDateFrom);
+            movingItem.setEnd(dndSourceDateTo);
+            movingItem.setStartTime(dndSourceStartDateTime);
+            movingItem.setEndTime(dndSourceEndDateTime);
+            calendar.updateItemToMonthGrid(movingItem);
 
             // reset drag-related properties
             Event.releaseCapture(getElement());
@@ -624,14 +667,13 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             monthEventMouseDown = false;
             startY = -1;
             startX = -1;
-            moveEvent = null;
+            movingItem = null;
             labelMouseDown = false;
             clickedWidget = null;
         }
     }
 
-    public void updateDragPosition(MonthItemLabel label, int dayDiff,
-                                   int weekDiff) {
+    public void updateDragPosition(MonthItemLabel label, int dayDiff, int weekDiff) {
         // Draw event to its new position only when position has changed
         if (dayDiff == prevDayDiff && weekDiff == prevWeekDiff) {
             return;
@@ -640,11 +682,11 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
         prevDayDiff = dayDiff;
         prevWeekDiff = weekDiff;
 
-        if (moveEvent == null) {
-            moveEvent = getItemByWidget(label);
+        if (movingItem == null) {
+            movingItem = getItemByWidget(label);
         }
 
-        calendar.updateItemToMonthGrid(moveEvent);
+        calendar.updateItemToMonthGrid(movingItem);
     }
 
     public int getRow() {
@@ -682,7 +724,7 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
             calendarItems[slot] = null;
             itemCount--;
             if (reDrawImmediately) {
-                reDraw(moveEvent == null);
+                reDraw(movingItem == null);
             }
             return true;
         }
@@ -707,7 +749,7 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
     }
 
     public CalendarItem getMoveItem() {
-        return moveEvent;
+        return movingItem;
     }
 
     public void addEmphasisStyle() {
@@ -717,4 +759,5 @@ public class SimpleDayCell extends FocusableFlowPanel implements MouseUpHandler,
     public void removeEmphasisStyle() {
         removeStyleDependentName("dragemphasis");
     }
+
 }

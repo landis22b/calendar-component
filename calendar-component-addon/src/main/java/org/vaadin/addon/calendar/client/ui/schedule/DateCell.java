@@ -24,6 +24,7 @@ import com.google.gwt.user.client.DOM;
 import com.google.gwt.user.client.Event;
 import com.google.gwt.user.client.ui.Widget;
 import com.vaadin.client.WidgetUtil;
+import org.vaadin.addon.calendar.client.DateConstants;
 
 import java.util.*;
 
@@ -565,7 +566,7 @@ public class DateCell extends FocusableComplexPanel
 
     /**
      *
-     * @param item
+     * @param item The Calendar Item
      * @return
      *
      *         This method is not necessary in the long run.. Or here can be
@@ -671,7 +672,7 @@ public class DateCell extends FocusableComplexPanel
                     slotEnd = i;
 
                 } else if (slotStart != -1 && slotEnd != -1) {
-                    break;
+                    break; // FIXME ! is 'else if' right
                 }
             }
 
@@ -680,13 +681,18 @@ public class DateCell extends FocusableComplexPanel
             int startMinutes = firstHour * 60 + slotStart * 30;
             int endMinutes = (firstHour * 60) + (slotEnd + 1) * 30;
             Date currentDate = getDate();
-            String yr = (currentDate.getYear() + 1900) + "-"
-                    + (currentDate.getMonth() + 1) + "-"
-                    + currentDate.getDate();
 
             if (weekgrid.getCalendar().getRangeSelectListener() != null) {
-                weekgrid.getCalendar().getRangeSelectListener().rangeSelected(
-                        yr + ":" + startMinutes + ":" + endMinutes);
+
+                SelectionRange weekSelection = new SelectionRange();
+                weekSelection.sMin = startMinutes;
+                weekSelection.eMin = endMinutes;
+                weekSelection.setStartDay(DateConstants.toRPCDate(
+                        currentDate.getYear(),
+                        currentDate.getMonth(),
+                        currentDate.getDate()));
+
+                weekgrid.getCalendar().getRangeSelectListener().rangeSelected(weekSelection);
             }
             eventRangeStart = -1;
 
@@ -811,12 +817,9 @@ public class DateCell extends FocusableComplexPanel
     }
 
     /**
-     * @deprecated As of 7.2, call or override
-     *             {@link #addEmphasisStyle(Element)} instead
+     * @since 7.2
      */
-    @Deprecated
-    public void addEmphasisStyle(
-            com.google.gwt.user.client.Element elementOver) {
+    public void addEmphasisStyle(Element elementOver) {
         String originalStylename = getStyleName(elementOver);
         setStyleName(elementOver, originalStylename + DRAGEMPHASISSTYLE);
     }
@@ -824,27 +827,10 @@ public class DateCell extends FocusableComplexPanel
     /**
      * @since 7.2
      */
-    public void addEmphasisStyle(Element elementOver) {
-        addEmphasisStyle(DOM.asOld(elementOver));
-    }
-
-    /**
-     * @deprecated As of 7.2, call or override
-     *             {@link #removeEmphasisStyle(Element)} instead
-     */
-    @Deprecated
-    public void removeEmphasisStyle(
-            com.google.gwt.user.client.Element elementOver) {
+    public void removeEmphasisStyle(Element elementOver) {
         String originalStylename = getStyleName(elementOver);
         setStyleName(elementOver, originalStylename.substring(0,
                 originalStylename.length() - DRAGEMPHASISSTYLE.length()));
-    }
-
-    /**
-     * @since 7.2
-     */
-    public void removeEmphasisStyle(Element elementOver) {
-        removeEmphasisStyle(DOM.asOld(elementOver));
     }
 
     @Override
