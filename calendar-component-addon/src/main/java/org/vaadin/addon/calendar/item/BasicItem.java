@@ -24,8 +24,8 @@ import java.util.List;
  * CalendarItem}. Has setters for all required fields and fires items when
  * this event is changed.
  *
- * @since 7.1.0
  * @author Vaadin Ltd.
+ * @since 7.1.0
  */
 
 public class BasicItem implements EditableCalendarItem {
@@ -41,17 +41,15 @@ public class BasicItem implements EditableCalendarItem {
     /**
      * Default constructor
      */
-    public BasicItem() {}
+    public BasicItem() {
+    }
 
     /**
      * Constructor for creating an event with the same start and end date
      *
-     * @param caption
-     *            The caption for the event
-     * @param description
-     *            The description for the event
-     * @param date
-     *            The date the event occurred
+     * @param caption     The caption for the event
+     * @param description The description for the event
+     * @param date        The date the event occurred
      */
     public BasicItem(String caption, String description, ZonedDateTime date) {
         this.caption = caption;
@@ -64,14 +62,10 @@ public class BasicItem implements EditableCalendarItem {
      * Constructor for creating an event with a start date and an end date.
      * Start date should be before the end date
      *
-     * @param caption
-     *            The caption for the event
-     * @param description
-     *            The description for the event
-     * @param startDate
-     *            The start date of the event
-     * @param endDate
-     *            The end date of the event
+     * @param caption     The caption for the event
+     * @param description The description for the event
+     * @param startDate   The start date of the event
+     * @param endDate     The end date of the event
      */
     public BasicItem(String caption, String description, ZonedDateTime startDate, ZonedDateTime endDate) {
         this.caption = caption;
@@ -241,6 +235,9 @@ public class BasicItem implements EditableCalendarItem {
         private transient List<ItemChangeListener> listeners = new ArrayList<>();
 
         public List<ItemChangeListener> getListeners() {
+            if (listeners == null) {
+                listeners = new ArrayList<>();
+            }
             return listeners;
         }
 
