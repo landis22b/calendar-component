@@ -135,3 +135,5 @@ $RECYCLE.BIN/
 
 # End of https://www.gitignore.io/api/macos,maven,vaadin,windows,intellij
 
+
+\.idea/
