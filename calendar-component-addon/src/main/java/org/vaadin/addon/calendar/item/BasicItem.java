@@ -18,6 +18,7 @@ package org.vaadin.addon.calendar.item;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Simple implementation of {@link CalendarItem
@@ -267,6 +268,28 @@ public class BasicItem implements EditableCalendarItem {
         @Override
         public void removeListener(ItemChangeListener listener) {
             listeners.remove(listener);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(getCaption(), getStart(), getEnd());
+        }
+
+        //TODO make multiuser safe. possibly in subclass
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (!(obj instanceof BasicItem)) {
+                return false;
+            }
+
+            BasicItem other = (BasicItem) obj;
+
+            return Objects.equals(getCaption(), other.getCaption()) &&
+                    Objects.equals(getStart(), other.getStart()) &&
+                    Objects.equals(getEnd(), other.getEnd());
         }
     }
 }
